@@ -1,0 +1,121 @@
+#!/bin/bash
+
+n=5
+function warn() {
+  local msg="$@"
+  echo "$msg"
+}
+
+function wait_cert() {
+  echo -ne '\e[H\e[J'
+  [[ -n $CERT_PASS ]] || die "Certificate password hasn't been set. Export the CERT_PASS and retry!"
+  echo "waitng cert"
+  tmux capturep $@ --
+  if tmux showb $@ -- | grep -i "PKCS#12"; then
+      tmux send -t vpn:0 "<cert_pass>" Enter
+  else
+    sleep 1
+    wait_cert
+  fi
+}
+
+function die() {
+    echo -ne '\e[H\e[J'
+    local msg="$@"
+    echo "$msg"
+    tmux kill-session -t vpn
+    exit
+}
+
+function wait_pass() {
+    echo -ne '\e[H\e[J'
+    [[ -n $PASSWORD ]] || die "Password hasn't been set. Export PASSWORD and retry"
+    echo "waiting pass"
+    tmux capturep $@ --
+    if tmux showb -- | grep "NT Password:"; then
+        tmux send "$pass" Enter
+    else
+        sleep 1
+        wait_pass
+    fi
+}
+
+function wait_gw() {
+    echo -ne '\e[H\e[J'
+    [[ -n $GPGW ]] || die "Gateway hasn't been set. Export GPGW and retry!"
+    echo "waiting gw"
+    tmux capturep $@ --
+    if tmux showb $@ -- | grep "GATEWAY:"; then
+        tmux send -t vpn:0 "$GPGW" Enter
+    else
+        sleep 1
+        wait_gw
+    fi
+}
+
+function wait_token() {
+    echo -ne '\e[H\e[J'
+    echo "waiting token"
+    tmux capturep $@ --
+    if tmux showb $@ -- | grep "RSA Passcode"; then
+        echo -n "Token:"
+        read -rs token && tmux send "$token" Enter
+    else
+        sleep 5
+        wait_token
+    fi
+}
+
+function wait_for_tunnel() {
+    echo -ne '\e[H\e[J'
+    echo "Waiting for tunnel to be established"
+    tmux capturep $@ --
+    if tmux showb $@ -- | grep "ESP session established with server"; then
+        echo "Tunnel established"
+    else 
+        if [[ $n -gt 0 ]]; then 
+            sleep 2
+            let n--
+            wait_for_tunnel
+        else
+            warn "Timeout exceeded"
+        fi
+    fi
+}
+
+function check_session() {
+    if tmux list-session | grep "vpn"; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+function create_tmux_ses() {
+  tunapp="openconnect"
+  [[ -n $GPENDPOINT ]] || die "Global Protect endpoint missing. Export GPENDPOINT and retry!"
+  user="$(whoami)"
+  cert="${HOME}/vpn/pc.pfx"
+  hip="${HOME}/vpn/hipreport.sh"
+  cmd="sudo "$tunapp" --protocol=gp "$GPENDPOINT" -u "$user" --os=win  -c "$cert" --csd-wrapper="$hip""
+  
+  if check_session ;then
+    echo "Creating new session"
+    tmux new-session -d -s vpn
+    tmux send -t vpn:0 "$cmd" Enter
+  else 
+    echo "session  name \"vpn\" already exist"
+    tmux capturep $@ --
+    tmux showb $@ -- | tail -5
+    exit
+  fi
+
+}
+
+#Main
+  create_tmux_ses
+  wait_cert
+  wait_pass
+  wait_gw
+  wait_token
+  wait_for_tunnel
