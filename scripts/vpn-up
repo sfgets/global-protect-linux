@@ -12,7 +12,7 @@ function wait_cert() {
   echo "waitng cert"
   tmux capturep $@ --
   if tmux showb $@ -- | grep -i "PKCS#12"; then
-      tmux send -t vpn:0 "<cert_pass>" Enter
+      tmux send -t vpn:0 "$CERT_PASS" Enter
   else
     sleep 1
     wait_cert
