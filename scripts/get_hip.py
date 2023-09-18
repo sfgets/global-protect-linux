@@ -76,7 +76,7 @@ def get_file_path(path: str) -> Path:
     return Path(find_path("AppData/Local"), 'Palo Alto Networks/GlobalProtect/PanGPA.log')
 
 
-def get_last_hip(path: None, compres: bool) -> bytes:
+def get_last_hip(path: None, compres: int) -> bytes:
     """
     Reads and parses PanGP.log and returns last send hip-report
     If path is provided reads the log from the path provided
